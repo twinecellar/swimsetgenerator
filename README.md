@@ -26,6 +26,7 @@ Copy `.env.example` to `.env` and set:
 Optional:
 
 - `PORT` (default `3000`)
+- `CORS_ORIGIN` (default `*`)
 - `GENERATE_LIMIT_MAX` (default `20`)
 - `GENERATE_LIMIT_WINDOW_MS` (default `60000`)
 

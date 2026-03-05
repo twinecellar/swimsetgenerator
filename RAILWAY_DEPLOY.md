@@ -24,6 +24,7 @@ Required:
 Optional:
 
 - `PORT`
+- `CORS_ORIGIN`
 - `GENERATE_LIMIT_MAX`
 - `GENERATE_LIMIT_WINDOW_MS`
 
