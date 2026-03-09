@@ -98,16 +98,22 @@ export function plannerSectionsToSegments(sections: PlannerSection[]): PlanSegme
   const segments: PlanSegment[] = [];
   for (const section of sections) {
     for (const step of section.steps) {
+      const isPyramid = PYRAMID_KINDS.has(step.kind);
       segments.push({
         id: step.step_id,
         type: section.title,
+        kind: step.kind,
         distance_m: segmentDistanceM(step),
+        distance_per_rep_m: step.distance_per_rep_m,
         stroke: step.stroke,
         description: formatStepSummary(step),
         effort: step.effort,
         repeats: step.reps,
         rest_seconds: step.reps > 1 ? (step.rest_seconds ?? undefined) : undefined,
         sendoff_seconds: step.reps > 1 ? (step.sendoff_seconds ?? undefined) : undefined,
+        pyramid_sequence_m: isPyramid && step.pyramid_sequence_m?.length ? step.pyramid_sequence_m : undefined,
+        rest_sequence_s: isPyramid && step.rest_sequence_s?.length ? step.rest_sequence_s : undefined,
+        sendoff_sequence_s: isPyramid && step.sendoff_sequence_s?.length ? step.sendoff_sequence_s : undefined,
       });
     }
   }

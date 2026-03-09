@@ -11,13 +11,18 @@ export interface PlanRequest {
 export interface PlanSegment {
   id: string;
   type: string;
+  kind: string;
   distance_m: number;
+  distance_per_rep_m: number;
   stroke: string;
   description: string;
   effort: Effort;
   repeats?: number;
   rest_seconds?: number;
   sendoff_seconds?: number;
+  pyramid_sequence_m?: number[];
+  rest_sequence_s?: number[];
+  sendoff_sequence_s?: number[];
 }
 
 export interface GeneratedPlan {

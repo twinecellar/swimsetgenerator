@@ -6,6 +6,14 @@ export interface LLMFailure {
 export function getLLMFailureResponse(error: unknown): LLMFailure {
   const message = error instanceof Error ? error.message : String(error ?? "");
   const lower = message.toLowerCase();
+  const name = error instanceof Error ? error.name : "";
+
+  if (name === "ValidationIssue") {
+    return {
+      error: "Planner returned an invalid plan payload.",
+      code: "LLM_INVALID_OUTPUT",
+    };
+  }
 
   if (lower.includes("anthropic_api_key is missing")) {
     return {

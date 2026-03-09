@@ -248,7 +248,14 @@ export async function registerPlanRoutes(app: FastifyInstance, env: AppEnv) {
 
       reply.send({ plan, request: requestInput });
     } catch (error) {
-      request.log.error({ error }, "LLM generation failed");
+      request.log.error(
+        {
+          error,
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+        "LLM generation failed",
+      );
       reply.code(500).send(getLLMFailureResponse(error));
     }
   }
