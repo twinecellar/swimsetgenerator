@@ -12,7 +12,6 @@ import type {
   SwimPlanResponse,
 } from './types';
 import { stepDistanceM } from './types';
-import { inferPreferVaried } from './style-inference';
 import type { GenerationSpecV2 } from './v2/types';
 
 export class ValidationIssue extends Error {
@@ -399,19 +398,6 @@ function hasSensitiveDownFeedback(historicSessions: HistoricSession[]): boolean 
   return false;
 }
 
-// ── Step signature (for style check) ─────────────────────────────────────────
-
-function stepSignature(step: Step): string {
-  return JSON.stringify([
-    step.kind,
-    step.reps,
-    step.distance_per_rep_m,
-    step.stroke,
-    step.rest_seconds,
-    step.effort,
-  ]);
-}
-
 // ── Public invariant check ────────────────────────────────────────────────────
 
 export function validateInvariants(
@@ -419,7 +405,7 @@ export function validateInvariants(
   request: SessionRequested,
   historicSessions: HistoricSession[],
   requestedTags: string[],
-  opts?: { version?: 'v1' | 'v2'; v2Spec?: GenerationSpecV2 },
+  v2Spec: GenerationSpecV2,
 ): void {
   const warmSum = validateSection(plan.sections.warm_up, 'warm_up');
   const mainSum = validateSection(plan.sections.main_set, 'main_set');
@@ -442,31 +428,7 @@ export function validateInvariants(
     throw new ValidationIssue('duration_minutes must match requested duration_minutes');
   }
 
-  const version = opts?.version ?? 'v1';
-
-  if (version === 'v1') {
-    const mergedTags = [...request.requested_tags, ...requestedTags];
-    const preferVaried = inferPreferVaried(mergedTags, historicSessions);
-
-    if (!preferVaried) {
-      const signatures = new Set(plan.sections.main_set.steps.map(stepSignature));
-      if (signatures.size > 1) {
-        throw new ValidationIssue(
-          'straightforward style requires one main_set pattern signature',
-        );
-      }
-    }
-
-    if (preferVaried && plan.sections.main_set.steps.length < 2) {
-      throw new ValidationIssue('varied style should include at least 2 main_set steps');
-    }
-  } else if (version === 'v2') {
-    const v2Spec = opts?.v2Spec;
-    if (!v2Spec) throw new ValidationIssue('v2Spec is required for v2 validation');
-    validateV2ArchetypeContract(plan, request, requestedTags, v2Spec);
-  } else {
-    throw new ValidationIssue(`unknown validation version '${version}'`);
-  }
+  validateV2ArchetypeContract(plan, request, requestedTags, v2Spec);
 
   if (hasSensitiveDownFeedback(historicSessions)) {
     for (const step of plan.sections.main_set.steps) {

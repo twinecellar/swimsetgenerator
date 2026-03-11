@@ -67,7 +67,7 @@ function buildValidPlanFromLLM(rawText: string, payload: SwimPlanInput, spec: Ge
     payload.session_requested,
     payload.historic_sessions,
     payload.requested_tags,
-    { version: 'v2', v2Spec: spec },
+    spec,
   );
   return plan;
 }

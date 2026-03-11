@@ -144,9 +144,9 @@ export function buildUserPromptV2(payload: SwimPlanInput, historySummary: string
     "LOCKED BLUEPRINT (DO NOT CHANGE STEP COUNTS):\n" +
     `${blueprintBlock(spec)}\n\n` +
     "EFFORT EXPRESSION:\n" +
-    "- easy: smooth, comfortable; longer repeats or easier rest.\n" +
-    "- medium: steady, repeatable; moderate rest.\n" +
-    "- hard: quality-focused; shorter reps and/or adequate rest; include warm-up activation.\n\n" +
+    "- easy: smooth, comfortable; longer repeats with rest_seconds (20-30s).\n" +
+    "- medium: steady, repeatable; prefer sendoff_seconds for intervals (e.g. 4×100m on 2:00 → sendoff_seconds: 120, rest_seconds: null).\n" +
+    "- hard: quality-focused; prefer sendoff_seconds with tight windows (e.g. 6×50m on 1:30 → sendoff_seconds: 90, rest_seconds: null); include warm-up activation.\n\n" +
     "STYLE / READABILITY RULES:\n" +
     "- Step descriptions must be one brief sentence with one key cue.\n" +
     "- Use plain, everyday language.\n" +

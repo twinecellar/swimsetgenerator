@@ -1,5 +1,4 @@
 import type { HistoricSession, SwimPlanInput } from "../types";
-import { inferPreferVaried } from "../style-inference";
 import { ARCHETYPES, DISPLAY_NAME_TO_ID } from "./archetypes";
 import { buildBlueprintV2 } from "./blueprint";
 import type { ArchetypeId, GenerationSpecV2 } from "./types";
@@ -38,21 +37,25 @@ function hasSensitiveDownFeedback(historicSessions: HistoricSession[]): boolean 
   return false;
 }
 
-function extractLastV2ArchetypeId(historicSessions: HistoricSession[]): ArchetypeId | null {
+function extractRecentArchetypeIds(historicSessions: HistoricSession[]): ArchetypeId[] {
+  const seen = new Set<ArchetypeId>();
+  const result: ArchetypeId[] = [];
   for (let i = historicSessions.length - 1; i >= 0; i -= 1) {
     const title = historicSessions[i]?.session_plan?.sections?.main_set?.title;
     if (typeof title !== "string" || !title.includes("—")) continue;
     const idx = title.indexOf("—");
-    const suffix = idx >= 0 ? title.slice(idx + 1) : "";
-    const name = suffix.trim().toLowerCase();
+    const name = title.slice(idx + 1).trim().toLowerCase();
     if (!name) continue;
     const id = DISPLAY_NAME_TO_ID[name];
-    if (id) return id;
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      result.push(id);
+    }
   }
-  return null;
+  return result; // most recent first
 }
 
-function routeArchetypeId(payload: SwimPlanInput, requestedTags: Set<string>): [ArchetypeId, boolean] {
+function routeArchetypeId(payload: SwimPlanInput, requestedTags: Set<string>, regenAttempt: number): [ArchetypeId, boolean] {
   const matches = Object.values(ARCHETYPES).filter((a) => {
     for (const t of a.trigger_tags) {
       if (requestedTags.has(t)) return true;
@@ -61,24 +64,21 @@ function routeArchetypeId(payload: SwimPlanInput, requestedTags: Set<string>): [
   });
 
   if (matches.length > 0) {
-    const winner = matches.reduce((best, cur) =>
-      cur.routing_priority < best.routing_priority ? cur : best,
-    );
+    const recentIds = extractRecentArchetypeIds(payload.historic_sessions ?? []);
+    const sorted = [...matches].sort((a, b) => {
+      const aIdx = recentIds.indexOf(a.archetype_id);
+      const bIdx = recentIds.indexOf(b.archetype_id);
+      const aScore = aIdx === -1 ? Infinity : aIdx;
+      const bScore = bIdx === -1 ? Infinity : bIdx;
+      if (aScore !== bScore) return bScore - aScore; // least recently used first
+      return a.routing_priority - b.routing_priority; // tiebreak by priority
+    });
+    const winner = sorted[regenAttempt % sorted.length];
     let archetypeId = winner.archetype_id;
     if (archetypeId === "stroke_switch_ladder" && payload.session_requested.swim_level === "beginner") {
       archetypeId = "mini_block_roulette";
     }
     return [archetypeId, true];
-  }
-
-  // fun is history-dependent: can't be expressed as static trigger_tags
-  if (requestedTags.has("fun")) {
-    const merged = [
-      ...(payload.session_requested.requested_tags ?? []),
-      ...(payload.requested_tags ?? []),
-    ];
-    const preferVaried = inferPreferVaried(merged, payload.historic_sessions ?? []);
-    return [preferVaried ? "mini_block_roulette" : "playful_alternator", false];
   }
 
   return ["flow_reset", false];
@@ -111,7 +111,7 @@ export function buildGenerationSpecV2(payload: SwimPlanInput): GenerationSpecV2 
       ? Math.max(0, Math.floor(regenAttemptRaw))
       : 0;
 
-  let [archetypeId, forcedByTags] = routeArchetypeId(payload, requestedTags);
+  let [archetypeId, forcedByTags] = routeArchetypeId(payload, requestedTags, regenAttempt);
 
   const sensitive = hasSensitiveDownFeedback(payload.historic_sessions ?? []);
   if (sensitive && (archetypeId === "stroke_switch_ladder" || archetypeId === "punchy_pops")) {
@@ -123,8 +123,8 @@ export function buildGenerationSpecV2(payload: SwimPlanInput): GenerationSpecV2 
     }
   }
 
-  const last = extractLastV2ArchetypeId(payload.historic_sessions ?? []);
-  archetypeId = rotateIfRepeating(archetypeId, { lastArchetypeId: last, forcedByTags });
+  const recentIds = extractRecentArchetypeIds(payload.historic_sessions ?? []);
+  archetypeId = rotateIfRepeating(archetypeId, { lastArchetypeId: recentIds[0] ?? null, forcedByTags });
 
   const archetype = ARCHETYPES[archetypeId];
   const blueprint = buildBlueprintV2(archetype, payload, { regenerate: regenAttempt > 0, regenAttempt });
