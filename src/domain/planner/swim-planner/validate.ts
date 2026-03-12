@@ -160,7 +160,7 @@ export function enforceAndNormalize(draft: LLMPlanDraft, request: SessionRequest
 
 // ── Field validation ──────────────────────────────────────────────────────────
 
-function validateStep(step: Step, sectionName: string): void {
+function validateStep(step: Step, sectionName: string, poolMultiple: number): void {
   if (!ALLOWED_KINDS.has(step.kind)) {
     throw new ValidationIssue(`${sectionName}.${step.step_id}: invalid kind '${step.kind}'`);
   }
@@ -193,9 +193,9 @@ function validateStep(step: Step, sectionName: string): void {
 	      );
 	    }
 	    for (const d of seq) {
-	      if (d < 50 || d % 50 !== 0) {
+	      if (d < poolMultiple || d % poolMultiple !== 0) {
 	        throw new ValidationIssue(
-	          `${sectionName}.${step.step_id}: every pyramid_sequence_m value must be a multiple of 50 and >= 50`,
+	          `${sectionName}.${step.step_id}: every pyramid_sequence_m value must be a multiple of ${poolMultiple} and >= ${poolMultiple}`,
 	        );
 	      }
 	    }
@@ -209,9 +209,9 @@ function validateStep(step: Step, sectionName: string): void {
 	    if (!(step.distance_per_rep_m > 0)) {
 	      throw new ValidationIssue(`${sectionName}.${step.step_id}: distance_per_rep_m must be > 0`);
 	    }
-	    if (step.distance_per_rep_m % 50 !== 0) {
+	    if (step.distance_per_rep_m % poolMultiple !== 0) {
       throw new ValidationIssue(
-        `${sectionName}.${step.step_id}: distance_per_rep_m must be divisible by 50`,
+        `${sectionName}.${step.step_id}: distance_per_rep_m must be divisible by ${poolMultiple}`,
       );
     }
   }
@@ -280,9 +280,9 @@ function validateStep(step: Step, sectionName: string): void {
       `${sectionName}.${step.step_id}: computed step distance must be > 0`,
     );
   }
-  if (dist % 50 !== 0) {
+  if (dist % poolMultiple !== 0) {
     throw new ValidationIssue(
-      `${sectionName}.${step.step_id}: computed step distance must be divisible by 50`,
+      `${sectionName}.${step.step_id}: computed step distance must be divisible by ${poolMultiple}`,
     );
   }
   if (step.rest_seconds !== null && step.rest_seconds !== undefined && step.rest_seconds < 0) {
@@ -359,7 +359,7 @@ function validateStep(step: Step, sectionName: string): void {
   }
 }
 
-function validateSection(section: Section, sectionName: string): number {
+function validateSection(section: Section, sectionName: string, poolMultiple: number): number {
   if (!section.title.trim()) {
     throw new ValidationIssue(`${sectionName}: title must not be empty`);
   }
@@ -369,15 +369,15 @@ function validateSection(section: Section, sectionName: string): number {
 
   let stepSum = 0;
   for (const step of section.steps) {
-    validateStep(step, sectionName);
+    validateStep(step, sectionName, poolMultiple);
     stepSum += stepDistanceM(step);
   }
 
   if (section.section_distance_m <= 0) {
     throw new ValidationIssue(`${sectionName}: section_distance_m must be > 0`);
   }
-  if (section.section_distance_m % 50 !== 0) {
-    throw new ValidationIssue(`${sectionName}: section_distance_m must be divisible by 50`);
+  if (section.section_distance_m % poolMultiple !== 0) {
+    throw new ValidationIssue(`${sectionName}: section_distance_m must be divisible by ${poolMultiple}`);
   }
   if (stepSum !== section.section_distance_m) {
     throw new ValidationIssue(`${sectionName}: section_distance_m does not match step sum`);
@@ -398,6 +398,14 @@ function hasSensitiveDownFeedback(historicSessions: HistoricSession[]): boolean 
   return false;
 }
 
+// ── Distance constraint check (non-throwing) ──────────────────────────────────
+
+export function checkDistanceConstraint(plan: SwimPlanResponse, request: SessionRequested): boolean {
+  if (request.distance_min !== undefined && plan.estimated_distance_m < request.distance_min) return false;
+  if (request.distance_max !== undefined && plan.estimated_distance_m > request.distance_max) return false;
+  return true;
+}
+
 // ── Public invariant check ────────────────────────────────────────────────────
 
 export function validateInvariants(
@@ -407,9 +415,11 @@ export function validateInvariants(
   requestedTags: string[],
   v2Spec: GenerationSpecV2,
 ): void {
-  const warmSum = validateSection(plan.sections.warm_up, 'warm_up');
-  const mainSum = validateSection(plan.sections.main_set, 'main_set');
-  const coolSum = validateSection(plan.sections.cool_down, 'cool_down');
+  const poolMultiple = request.pool_length === 25 ? 25 : 50;
+
+  const warmSum = validateSection(plan.sections.warm_up, 'warm_up', poolMultiple);
+  const mainSum = validateSection(plan.sections.main_set, 'main_set', poolMultiple);
+  const coolSum = validateSection(plan.sections.cool_down, 'cool_down', poolMultiple);
 
   const total = warmSum + mainSum + coolSum;
   if (total !== plan.estimated_distance_m) {
@@ -418,8 +428,8 @@ export function validateInvariants(
   if (plan.estimated_distance_m <= 0) {
     throw new ValidationIssue('estimated_distance_m must be > 0');
   }
-  if (plan.estimated_distance_m % 50 !== 0) {
-    throw new ValidationIssue('estimated_distance_m must be divisible by 50');
+  if (plan.estimated_distance_m % poolMultiple !== 0) {
+    throw new ValidationIssue(`estimated_distance_m must be divisible by ${poolMultiple}`);
   }
   if (plan.duration_minutes <= 0) {
     throw new ValidationIssue('duration_minutes must be > 0');

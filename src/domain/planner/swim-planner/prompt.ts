@@ -222,9 +222,37 @@ export function swimLevelHint(level: string): string {
   return map[level] ?? '';
 }
 
+// ── Natural metres-per-minute by effort ───────────────────────────────────────
+
+const NATURAL_DPM: Record<string, number> = { easy: 37, medium: 33, hard: 27 };
+
 // ── Distance guidance ─────────────────────────────────────────────────────────
 
-export function distanceGuidance(durationMinutes: number, effort: string): string {
+export function distanceGuidance(
+  durationMinutes: number,
+  effort: string,
+  distanceMin?: number,
+  distanceMax?: number,
+): string {
+  if (distanceMin !== undefined && distanceMax !== undefined) {
+    return (
+      `Target estimated_distance_m: ${distanceMin}–${distanceMax}m. ` +
+      `Use the SESSION DENSITY guidance to structure reps and rest to reach this target.`
+    );
+  }
+  if (distanceMin !== undefined) {
+    return (
+      `Target estimated_distance_m: at least ${distanceMin}m. ` +
+      `Use the SESSION DENSITY guidance to structure reps and rest to reach this target.`
+    );
+  }
+  if (distanceMax !== undefined) {
+    return (
+      `Target estimated_distance_m: at most ${distanceMax}m. ` +
+      `Use the SESSION DENSITY guidance to structure reps and rest within this cap.`
+    );
+  }
+
   const ppmByEffort: Record<string, [number, number]> = {
     easy: [32, 42],
     medium: [28, 38],
@@ -239,15 +267,85 @@ export function distanceGuidance(durationMinutes: number, effort: string): strin
   const hi = roundTo50(durationMinutes * hiPpm);
 
   return (
-    `Target estimated_distance_m for this request: ${lo}-${hi}m ` +
+    `Target estimated_distance_m for this request: ${lo}–${hi}m ` +
     `(derived from duration=${durationMinutes} and effort=${effort}; ` +
     `easy tends to be higher-volume, hard tends to be lower-volume).`
   );
 }
 
+// ── Session density guidance ──────────────────────────────────────────────────
+
+export function sessionDensityGuidance(
+  durationMinutes: number,
+  effort: string,
+  distanceMin?: number,
+  distanceMax?: number,
+): string {
+  if (distanceMin === undefined && distanceMax === undefined) return '';
+
+  const natural = NATURAL_DPM[effort] ?? 33;
+
+  // Use midpoint for density calculation; skew toward the binding bound when only one is given
+  let targetM: number;
+  if (distanceMin !== undefined && distanceMax !== undefined) {
+    targetM = (distanceMin + distanceMax) / 2;
+  } else if (distanceMin !== undefined) {
+    targetM = distanceMin * 1.05; // aim slightly above the floor
+  } else {
+    targetM = distanceMax! * 0.92; // aim slightly below the ceiling
+  }
+
+  const targetDpm = targetM / durationMinutes;
+  const densityRatio = targetDpm / natural;
+  const targetRounded = Math.round(targetM / 50) * 50;
+  const dpmRounded = Math.round(targetDpm);
+
+  const header =
+    `SESSION DENSITY: ~${targetRounded}m in ${durationMinutes}min ≈ ${dpmRounded}m/min ` +
+    `(natural for ${effort}: ~${Math.round(natural)}m/min).`;
+
+  if (densityRatio >= 1.2) {
+    const pct = Math.round((densityRatio - 1) * 100);
+    return (
+      `${header} HIGH-density (+${pct}% — more volume, less rest).\n` +
+      `To accumulate the required distance within the time limit:\n` +
+      `- Prefer more reps of shorter distances (e.g. 10×50m rather than 4×100m).\n` +
+      `- Use sendoff_seconds (not rest_seconds) on all interval steps; sendoffs keep the clock moving.\n` +
+      `- Sendoff reference: 50m → 50–65s | 100m → 1:40–2:00 | 200m → 3:20–3:50.\n` +
+      `- Keep warm-up and cool-down compact; assign the bulk of distance to the main set.\n` +
+      `- Continuous steps are appropriate to accumulate volume efficiently.`
+    );
+  }
+
+  if (densityRatio <= 0.8) {
+    const pct = Math.round((1 - densityRatio) * 100);
+    return (
+      `${header} LOW-density (−${pct}% — fewer metres, more recovery time).\n` +
+      `To spread the session across the reduced distance:\n` +
+      `- Use lower rep counts; prefer fewer, longer reps.\n` +
+      `- Use rest_seconds (not sendoff_seconds); rest generously: 40–90s between efforts.\n` +
+      `- Allow full recovery between main-set efforts — quality matters more than volume.\n` +
+      `- Warm-up and cool-down may be proportionally generous; this is a quality-focused session.`
+    );
+  }
+
+  return (
+    `${header} Normal density — apply standard EFFORT EXPRESSION guidelines above.`
+  );
+}
+
 // ── Section proportion guidance ───────────────────────────────────────────────
 
-export function sectionProportionGuidance(effort: string, durationMinutes: number): string {
+export function sectionProportionGuidance(
+  effort: string,
+  durationMinutes: number,
+  distanceMin?: number,
+  distanceMax?: number,
+  poolLength?: 25 | 50,
+): string {
+  const poolMultiple = poolLength === 25 ? 25 : 50;
+  const roundToMultiple = (m: number) => Math.round(m / poolMultiple) * poolMultiple;
+
   const ppmByEffort: Record<string, [number, number]> = {
     easy: [32, 42],
     medium: [28, 38],
@@ -256,45 +354,73 @@ export function sectionProportionGuidance(effort: string, durationMinutes: numbe
 
   const [loPpm, hiPpm] = ppmByEffort[effort] ?? [28, 38];
 
-  const roundTo50 = (m: number) => Math.round(m / 50) * 50;
+  const hasDistanceConstraint = distanceMin !== undefined || distanceMax !== undefined;
 
-  const target = roundTo50(durationMinutes * (loPpm + hiPpm) / 2);
+  let target: number;
+  if (distanceMin !== undefined && distanceMax !== undefined) {
+    target = roundToMultiple((distanceMin + distanceMax) / 2);
+  } else if (distanceMin !== undefined) {
+    target = roundToMultiple(distanceMin * 1.1);
+  } else if (distanceMax !== undefined) {
+    target = roundToMultiple(distanceMax * 0.9);
+  } else {
+    target = roundToMultiple(durationMinutes * (loPpm + hiPpm) / 2);
+  }
 
-  const warmFrac = effort === 'easy' ? 0.20 : effort === 'medium' ? 0.22 : 0.28;
-  const coolFrac = 0.14;
+  // Density-aware section fractions: high density compresses warm/cool to give more to main set
+  const natural = NATURAL_DPM[effort] ?? 33;
+  const densityRatio = (target / durationMinutes) / natural;
 
-  const warm = Math.max(roundTo50(target * warmFrac), 100);
-  const cool = Math.max(roundTo50(target * coolFrac), 100);
+  let warmFrac: number;
+  let coolFrac: number;
+  if (densityRatio >= 1.2) {
+    warmFrac = 0.14;
+    coolFrac = 0.08;
+  } else if (densityRatio <= 0.8) {
+    warmFrac = effort === 'easy' ? 0.22 : 0.24;
+    coolFrac = 0.16;
+  } else {
+    warmFrac = effort === 'easy' ? 0.20 : effort === 'medium' ? 0.22 : 0.28;
+    coolFrac = 0.14;
+  }
+
+  const warm = Math.max(roundToMultiple(target * warmFrac), poolMultiple * 2);
+  const cool = Math.max(roundToMultiple(target * coolFrac), poolMultiple * 2);
 
   let main = target - warm - cool;
 
-  if (main < 100) {
-    const deficit = 100 - main;
+  if (main < poolMultiple * 2) {
+    const deficit = poolMultiple * 2 - main;
 
-    const warmMin = 100;
-    const coolMin = 100;
-
-    const warmSlack = Math.max(0, warm - warmMin);
+    const warmSlack = Math.max(0, warm - poolMultiple * 2);
     const takeFromWarm = Math.min(warmSlack, deficit);
     const newWarm = warm - takeFromWarm;
 
     const remaining = deficit - takeFromWarm;
-    const coolSlack = Math.max(0, cool - coolMin);
+    const coolSlack = Math.max(0, cool - poolMultiple * 2);
     const takeFromCool = Math.min(coolSlack, remaining);
     const newCool = cool - takeFromCool;
 
     main = target - newWarm - newCool;
+    const total = newWarm + main + newCool;
 
+    const rangeNote = hasDistanceConstraint
+      ? ` — total ${total}m must stay within the required distance range`
+      : '';
     return (
-      `Suggested section distances for this session (all must be exact multiples of 50m): ` +
-      `warm_up ~${newWarm}m, main_set ~${main}m, cool_down ~${newCool}m ` +
-      `(total ~${newWarm + main + newCool}m).`
+      `Section distances (all must be exact multiples of ${poolMultiple}m): ` +
+      `warm_up ${newWarm}m, main_set ${main}m, cool_down ${newCool}m ` +
+      `(total ${total}m${rangeNote}).`
     );
   }
 
+  const total = warm + main + cool;
+  const rangeNote = hasDistanceConstraint
+    ? ` — total ${total}m must stay within the required distance range`
+    : '';
   return (
-    `Suggested section distances for this session (all must be exact multiples of 50m): ` +
-    `warm_up ~${warm}m, main_set ~${main}m, cool_down ~${cool}m ` +
-    `(total ~${warm + main + cool}m).`
+    `Section distances (all must be exact multiples of ${poolMultiple}m): ` +
+    `warm_up ${warm}m, main_set ${main}m, cool_down ${cool}m ` +
+    `(total ${total}m${rangeNote}).`
   );
 }

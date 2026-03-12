@@ -1,0 +1,305 @@
+{
+  "api_overview": {
+    "description": "SwimSetter API — generates personalized swim workout plans",
+    "auth": "Bearer token (Supabase) required on all endpoints except /healthz",
+    "base_path": "/v1"
+  },
+
+  "endpoints": {
+    "health_check": {
+      "method": "GET",
+      "path": "/healthz",
+      "response": { "ok": true }
+    },
+
+    "generate_plan": {
+      "method": "POST",
+      "path": "/v1/plans/generate",
+      "request": {
+        "duration_minutes": "15 | 20 | 25 | 30 | 35 | 40 | 45 | 50 | 55 | 60",
+        "effort": "easy | medium | hard",
+        "requested_tags": ["technique", "speed", "endurance", "recovery", "fun", "steady", "freestyle", "mixed", "kick", "fins", "pull", "paddles", "golf", "broken", "fartlek", "time_trial", "sprints", "hypoxic", "underwater", "choice", "benchmark"],
+        "regen_attempt": "integer 0–50 (optional)"
+      },
+      "response_200": {
+        "plan": {
+          "duration_minutes": 30,
+          "estimated_distance_m": 1200,
+          "segments": [
+            {
+              "id": "step-1",
+              "type": "Warm Up",
+              "kind": "continuous",
+              "distance_m": 300,
+              "distance_per_rep_m": 300,
+              "stroke": "freestyle",
+              "description": "300m freestyle easy",
+              "effort": "easy",
+              "repeats": 1,
+              "rest_seconds": null,
+              "sendoff_seconds": null
+            },
+            {
+              "id": "step-2",
+              "type": "Main Set",
+              "kind": "intervals",
+              "distance_m": 700,
+              "distance_per_rep_m": 100,
+              "stroke": "freestyle",
+              "description": "7 x 100m freestyle medium @ 20s rest",
+              "effort": "medium",
+              "repeats": 7,
+              "rest_seconds": 20,
+              "sendoff_seconds": null
+            },
+            {
+              "id": "step-3",
+              "type": "Main Set",
+              "kind": "pyramid",
+              "distance_m": 600,
+              "distance_per_rep_m": null,
+              "stroke": "backstroke",
+              "description": "Pyramid: 50 / 100 / 150 / 100 / 50 backstroke medium",
+              "effort": "medium",
+              "repeats": null,
+              "pyramid_sequence_m": [50, 100, 150, 100, 50],
+              "rest_sequence_s": [10, 15, 20, 15, 10],
+              "sendoff_sequence_s": null
+            },
+            {
+              "id": "step-4",
+              "type": "Main Set",
+              "kind": "build",
+              "distance_m": 400,
+              "distance_per_rep_m": 100,
+              "stroke": "choice",
+              "description": "4 x 100m choice — build effort each rep",
+              "effort": "hard",
+              "repeats": 4,
+              "rest_seconds": 30,
+              "sendoff_seconds": null
+            },
+            {
+              "id": "step-5",
+              "type": "Main Set",
+              "kind": "negative_split",
+              "distance_m": 400,
+              "distance_per_rep_m": 200,
+              "stroke": "freestyle",
+              "description": "2 x 200m freestyle — second 100 faster than first",
+              "effort": "hard",
+              "repeats": 2,
+              "rest_seconds": 30,
+              "sendoff_seconds": null
+            },
+            {
+              "id": "step-6",
+              "type": "Main Set",
+              "kind": "broken",
+              "distance_m": 200,
+              "distance_per_rep_m": 200,
+              "stroke": "freestyle",
+              "description": "200m broken freestyle — pause 10s at each 50",
+              "effort": "hard",
+              "repeats": 1,
+              "rest_seconds": null,
+              "broken_pause_s": 10
+            },
+            {
+              "id": "step-7",
+              "type": "Main Set",
+              "kind": "fartlek",
+              "distance_m": 300,
+              "distance_per_rep_m": 300,
+              "stroke": "freestyle",
+              "description": "300m fartlek — surge every 25m",
+              "effort": "hard",
+              "repeats": 1,
+              "rest_seconds": null
+            },
+            {
+              "id": "step-8",
+              "type": "Main Set",
+              "kind": "time_trial",
+              "distance_m": 400,
+              "distance_per_rep_m": 400,
+              "stroke": "freestyle",
+              "description": "400m time trial — go for a best time",
+              "effort": "hard",
+              "repeats": 1,
+              "target_time_s": 360,
+              "split_instruction": "even splits",
+              "rest_seconds": null
+            },
+            {
+              "id": "step-9",
+              "type": "Cool Down",
+              "kind": "continuous",
+              "distance_m": 200,
+              "distance_per_rep_m": 200,
+              "stroke": "choice",
+              "description": "200m choice easy cool down",
+              "effort": "easy",
+              "repeats": 1,
+              "rest_seconds": null
+            }
+          ],
+          "metadata": {
+            "version": "llm_v2",
+            "swim_level": "beginner | intermediate | advanced",
+            "input_effort": "easy | medium | hard",
+            "archetype_id": "flow_reset | cruise_builder | playful_alternator | mini_block_roulette | stroke_switch_ladder | punchy_pops | gear_change_up | technique_refresh | choice_session | benchmark_lite",
+            "archetype_name": "Flow Reset | Cruise Builder | Playful Alternator | Mini Block Roulette | Stroke-Switch Ladder | Punchy Pops | Gear Change-Up | Technique Refresh | Choice Session | Benchmark Lite",
+            "forced_by_tags": false
+          }
+        },
+        "request": {
+          "duration_minutes": 30,
+          "effort": "medium",
+          "requested_tags": ["endurance", "freestyle"]
+        }
+      }
+    },
+
+    "accept_plan": {
+      "method": "POST",
+      "path": "/v1/plans/accept",
+      "request": {
+        "request": {
+          "duration_minutes": 30,
+          "effort": "medium",
+          "requested_tags": []
+        },
+        "plan": "<<full GeneratedPlan object from generate response>>"
+      },
+      "response_200": {
+        "plan": {
+          "id": "uuid-string",
+          "created_at": "2026-03-12T10:00:00Z",
+          "status": "accepted",
+          "request": {
+            "duration_minutes": 30,
+            "effort": "medium",
+            "requested_tags": []
+          },
+          "plan": "<<full GeneratedPlan object>>"
+        }
+      }
+    },
+
+    "complete_plan": {
+      "method": "POST",
+      "path": "/v1/plans/:id/complete",
+      "request": {
+        "rating": "0 (thumbs down) | 1 (thumbs up) | null",
+        "tags": ["technique", "speed", "endurance"],
+        "notes": "Felt strong today, legs tired"
+      },
+      "response_200": {
+        "completion": {
+          "plan_id": "uuid-string",
+          "rating": 1,
+          "tags": ["endurance", "steady"],
+          "notes": "Felt strong today",
+          "completed_at": "2026-03-12T11:00:00Z"
+        }
+      }
+    }
+  },
+
+  "enumerations": {
+    "effort_levels": ["easy", "medium", "hard"],
+    "section_types": ["Warm Up", "Main Set", "Cool Down"],
+    "step_kinds": [
+      "continuous",
+      "intervals",
+      "pyramid",
+      "descending",
+      "ascending",
+      "build",
+      "negative_split",
+      "broken",
+      "fartlek",
+      "time_trial"
+    ],
+    "strokes": [
+      "freestyle",
+      "backstroke",
+      "breaststroke",
+      "butterfly",
+      "mixed",
+      "choice"
+    ],
+    "swim_levels": ["beginner", "intermediate", "advanced"],
+    "plan_statuses": ["accepted", "completed"],
+    "tags": [
+      "technique", "speed", "endurance", "recovery", "fun", "steady",
+      "freestyle", "mixed", "kick", "fins", "pull", "paddles",
+      "golf", "broken", "fartlek", "time_trial", "sprints",
+      "hypoxic", "underwater", "choice", "benchmark"
+    ],
+    "archetypes": [
+      { "id": "flow_reset",          "name": "Flow Reset",          "focus": "recovery" },
+      { "id": "cruise_builder",      "name": "Cruise Builder",      "focus": "endurance / steady" },
+      { "id": "playful_alternator",  "name": "Playful Alternator",  "focus": "variety / fun" },
+      { "id": "mini_block_roulette", "name": "Mini Block Roulette", "focus": "mixed blocks" },
+      { "id": "stroke_switch_ladder","name": "Stroke-Switch Ladder","focus": "stroke variety" },
+      { "id": "punchy_pops",         "name": "Punchy Pops",         "focus": "speed / sprints" },
+      { "id": "gear_change_up",      "name": "Gear Change-Up",      "focus": "equipment (fins/pull/paddles)" },
+      { "id": "technique_refresh",   "name": "Technique Refresh",   "focus": "technique drills" },
+      { "id": "choice_session",      "name": "Choice Session",      "focus": "swimmer's choice" },
+      { "id": "benchmark_lite",      "name": "Benchmark Lite",      "focus": "time trials / golf" }
+    ]
+  },
+
+  "error_responses": {
+    "400_validation": {
+      "error": "duration_minutes must be a multiple of 5 between 15 and 60"
+    },
+    "400_rate_limited": {
+      "error": "Too many requests",
+      "code": "RATE_LIMITED"
+    },
+    "400_no_profile": {
+      "error": "User profile not found",
+      "code": "NO_PROFILE"
+    },
+    "401_unauthorized": {
+      "error": "Missing bearer token"
+    },
+    "404_not_found": {
+      "error": "Plan not found"
+    },
+    "500_llm_errors": [
+      { "error": "Planner returned invalid payload",  "code": "LLM_INVALID_OUTPUT" },
+      { "error": "ANTHROPIC_API_KEY missing",         "code": "LLM_MISSING_API_KEY" },
+      { "error": "Cannot reach Anthropic",            "code": "LLM_CONNECTION_ERROR" },
+      { "error": "Generation failed",                 "code": "LLM_GENERATION_FAILED" }
+    ]
+  },
+
+  "segment_field_reference": {
+    "id":                  "string — unique step ID",
+    "type":                "Warm Up | Main Set | Cool Down",
+    "kind":                "continuous | intervals | pyramid | descending | ascending | build | negative_split | broken | fartlek | time_trial",
+    "distance_m":          "number — total distance for this segment",
+    "distance_per_rep_m":  "number | null — distance of a single rep (null for pyramid/sequence kinds)",
+    "stroke":              "freestyle | backstroke | breaststroke | butterfly | mixed | choice",
+    "description":         "string — human-readable label (e.g. '4 x 100m freestyle medium @ 20s rest')",
+    "effort":              "easy | medium | hard",
+    "repeats":             "number | null — rep count (null for pyramid/sequence kinds)",
+    "rest_seconds":        "number | null — rest between reps in seconds",
+    "sendoff_seconds":     "number | null — sendoff interval in seconds (alternative to rest)",
+    "pyramid_sequence_m":  "number[] | null — distances for each step of a pyramid/descending/ascending",
+    "rest_sequence_s":     "number[] | null — per-step rest for sequence kinds",
+    "sendoff_sequence_s":  "number[] | null — per-step sendoff for sequence kinds",
+    "broken_pause_s":      "number | null — pause duration for broken swims",
+    "target_time_s":       "number | null — goal time in seconds for time trials",
+    "split_instruction":   "string | null — pacing guidance (e.g. 'even splits', 'negative split')",
+    "hypoxic":             "boolean | null",
+    "underwater":          "boolean | null",
+    "fins":                "boolean | null",
+    "pull":                "boolean | null",
+    "paddles":             "boolean | null"
+  }
+}

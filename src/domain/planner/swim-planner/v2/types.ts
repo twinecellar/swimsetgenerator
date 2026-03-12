@@ -40,5 +40,8 @@ export interface GenerationSpecV2 {
   blueprint: BlueprintV2;
   requested_tags: ReadonlyArray<string>;
   forced_by_tags: boolean;
+  pool_length?: 25 | 50;
+  distance_min?: number;
+  distance_max?: number;
 }
 

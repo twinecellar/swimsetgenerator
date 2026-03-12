@@ -95,6 +95,9 @@ export async function registerPlanRoutes(app: FastifyInstance, env: AppEnv) {
       requested_tags?: unknown;
       regen_attempt?: unknown;
       fun_mode?: unknown;
+      pool_length?: unknown;
+      distance_min?: unknown;
+      distance_max?: unknown;
     };
 
     if (Object.prototype.hasOwnProperty.call(body, "fun_mode")) {
@@ -130,6 +133,42 @@ export async function registerPlanRoutes(app: FastifyInstance, env: AppEnv) {
       regenAttempt = n;
     }
 
+    let poolLength: 25 | 50 | undefined;
+    if (body.pool_length != null) {
+      if (body.pool_length !== 25 && body.pool_length !== 50) {
+        reply.code(400).send({ error: "pool_length must be 25 or 50" });
+        return;
+      }
+      poolLength = body.pool_length as 25 | 50;
+    }
+
+    const poolMultiple = poolLength === 25 ? 25 : 50;
+
+    let distanceMin: number | undefined;
+    if (body.distance_min != null) {
+      const n = typeof body.distance_min === "number" ? body.distance_min : Number(body.distance_min);
+      if (!Number.isFinite(n) || n <= 0 || Math.round(n) !== n || n % poolMultiple !== 0) {
+        reply.code(400).send({ error: `distance_min must be a positive multiple of ${poolMultiple}` });
+        return;
+      }
+      distanceMin = n;
+    }
+
+    let distanceMax: number | undefined;
+    if (body.distance_max != null) {
+      const n = typeof body.distance_max === "number" ? body.distance_max : Number(body.distance_max);
+      if (!Number.isFinite(n) || n <= 0 || Math.round(n) !== n || n % poolMultiple !== 0) {
+        reply.code(400).send({ error: `distance_max must be a positive multiple of ${poolMultiple}` });
+        return;
+      }
+      distanceMax = n;
+    }
+
+    if (distanceMin !== undefined && distanceMax !== undefined && distanceMin > distanceMax) {
+      reply.code(400).send({ error: "distance_min must be less than or equal to distance_max" });
+      return;
+    }
+
     const requestedTags = normalizeRequestedTags(body.requested_tags);
     const durationMinutes = body.duration_minutes as PlanRequest["duration_minutes"];
     const effort = body.effort as Effort;
@@ -154,6 +193,9 @@ export async function registerPlanRoutes(app: FastifyInstance, env: AppEnv) {
       duration_minutes: durationMinutes,
       effort,
       requested_tags: requestedTags,
+      ...(poolLength !== undefined ? { pool_length: poolLength } : {}),
+      ...(distanceMin !== undefined ? { distance_min: distanceMin } : {}),
+      ...(distanceMax !== undefined ? { distance_max: distanceMax } : {}),
     };
 
     const completionPlanIds = (completions ?? [])
@@ -190,6 +232,9 @@ export async function registerPlanRoutes(app: FastifyInstance, env: AppEnv) {
         effort: requestInput.effort,
         requested_tags: requestInput.requested_tags ?? [],
         swim_level: profileRow.swim_level ?? undefined,
+        ...(poolLength !== undefined ? { pool_length: poolLength } : {}),
+        ...(distanceMin !== undefined ? { distance_min: distanceMin } : {}),
+        ...(distanceMax !== undefined ? { distance_max: distanceMax } : {}),
       },
       historic_sessions: (completions ?? [])
         .map((completion): HistoricSessionPayload | null => {
@@ -224,7 +269,7 @@ export async function registerPlanRoutes(app: FastifyInstance, env: AppEnv) {
     };
 
     try {
-      const { plan: llmPlan, spec } = await runSwimPlannerLLM(payload);
+      const { plan: llmPlan, spec, distanceConstraintMet } = await runSwimPlannerLLM(payload);
       const segments = plannerSectionsToSegments([
         llmPlan.sections.warm_up,
         llmPlan.sections.main_set,
@@ -232,6 +277,7 @@ export async function registerPlanRoutes(app: FastifyInstance, env: AppEnv) {
       ]);
       const totalDistanceM = segments.reduce((sum, segment) => sum + segment.distance_m, 0);
 
+      const hasDistanceConstraint = distanceMin !== undefined || distanceMax !== undefined;
       const plan: GeneratedPlan = {
         duration_minutes: llmPlan.duration_minutes,
         estimated_distance_m: totalDistanceM,
@@ -243,6 +289,7 @@ export async function registerPlanRoutes(app: FastifyInstance, env: AppEnv) {
           archetype_id: spec.archetype.archetype_id,
           archetype_name: spec.archetype.display_name,
           forced_by_tags: spec.forced_by_tags,
+          ...(hasDistanceConstraint ? { distance_constraint_met: distanceConstraintMet } : {}),
         },
       };
 

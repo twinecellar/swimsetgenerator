@@ -129,10 +129,14 @@ export function buildGenerationSpecV2(payload: SwimPlanInput): GenerationSpecV2 
   const archetype = ARCHETYPES[archetypeId];
   const blueprint = buildBlueprintV2(archetype, payload, { regenerate: regenAttempt > 0, regenAttempt });
 
+  const req = payload.session_requested;
   return {
     archetype,
     blueprint,
     requested_tags: tagsList,
     forced_by_tags: forcedByTags,
+    ...(req.pool_length !== undefined ? { pool_length: req.pool_length } : {}),
+    ...(req.distance_min !== undefined ? { distance_min: req.distance_min } : {}),
+    ...(req.distance_max !== undefined ? { distance_max: req.distance_max } : {}),
   };
 }

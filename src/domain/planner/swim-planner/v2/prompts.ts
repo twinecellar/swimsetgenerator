@@ -1,5 +1,5 @@
 import type { StepKind, SwimPlanInput } from "../types";
-import { distanceGuidance, schemaExcerpt, sectionProportionGuidance, swimLevelHint } from "../prompt";
+import { distanceGuidance, schemaExcerpt, sectionProportionGuidance, sessionDensityGuidance, swimLevelHint } from "../prompt";
 import type { GenerationSpecV2 } from "./types";
 
 export function buildSystemPromptV2(): string {
@@ -98,8 +98,9 @@ export function buildUserPromptV2(payload: SwimPlanInput, historySummary: string
   const requestedTags = [...spec.requested_tags];
 
   const schema = schemaExcerpt();
-  const distance = distanceGuidance(req.duration_minutes, req.effort);
-  const proportions = sectionProportionGuidance(req.effort, req.duration_minutes);
+  const distance = distanceGuidance(req.duration_minutes, req.effort, req.distance_min, req.distance_max);
+  const density = sessionDensityGuidance(req.duration_minutes, req.effort, req.distance_min, req.distance_max);
+  const proportions = sectionProportionGuidance(req.effort, req.duration_minutes, req.distance_min, req.distance_max, req.pool_length);
 
   const archetype = spec.archetype;
   const hasGolfTag = requestedTags.includes("golf");
@@ -128,9 +129,14 @@ export function buildUserPromptV2(payload: SwimPlanInput, historySummary: string
     "1. Return valid JSON matching the schema exactly.\n" +
     "2. Follow the selected archetype contract (mandatory structure).\n" +
     "3. Follow the locked blueprint (exact step counts + allowed kinds).\n" +
-    "4. Match requested duration_minutes and effort.\n" +
-    "5. Apply tags as modifiers only (do not change the session shape).\n" +
-    "6. Use history to avoid disliked mechanics and repetition.\n\n" +
+    (req.distance_min !== undefined || req.distance_max !== undefined
+      ? "4. Hit the requested distance range (hard constraint — overrides effort-based volume defaults).\n" +
+        "5. Match requested duration_minutes and effort (secondary guide after distance).\n" +
+        "6. Apply tags as modifiers only (do not change the session shape).\n" +
+        "7. Use history to avoid disliked mechanics and repetition.\n\n"
+      : "4. Match requested duration_minutes and effort.\n" +
+        "5. Apply tags as modifiers only (do not change the session shape).\n" +
+        "6. Use history to avoid disliked mechanics and repetition.\n\n") +
     "REQUEST:\n" +
     `${JSON.stringify(req)}\n\n` +
     swimLevelBlock +
@@ -154,7 +160,10 @@ export function buildUserPromptV2(payload: SwimPlanInput, historySummary: string
     "- Do not reference metres, distances, or rep lengths in descriptions; cue effort and feel instead.\n\n" +
     "DISTANCE GUIDANCE:\n" +
     `${distance}\n\n` +
-    "SECTION PROPORTIONS:\n" +
+    (density ? `${density}\n\n` : "") +
+    (req.distance_min !== undefined || req.distance_max !== undefined
+      ? "SECTION DISTANCES (derived from required range — use these as targets):\n"
+      : "SECTION PROPORTIONS:\n") +
     `${proportions}\n\n` +
     "HARD CONSTRAINTS:\n" +
     "- Return exactly ONE JSON object.\n" +
@@ -167,8 +176,18 @@ export function buildUserPromptV2(payload: SwimPlanInput, historySummary: string
     "- Every step must include all required fields.\n" +
     "- Sum of all step distances must equal section_distance_m.\n" +
     "- Sum of all sections must equal estimated_distance_m.\n" +
-    "- All distances must be exact multiples of 50 (50, 100, 150, ...): distance_per_rep_m, section_distance_m, estimated_distance_m, and pyramid_sequence_m values.\n" +
-    "- Minimum distance_per_rep_m is 50m. Never use 25m or any non-multiple of 50.\n" +
+    (req.pool_length === 25
+      ? "- Pool length is 25m. All distances must be exact multiples of 25 (25, 50, 75, 100, ...): distance_per_rep_m, section_distance_m, estimated_distance_m, and pyramid_sequence_m values.\n" +
+        "- Minimum distance_per_rep_m is 25m.\n"
+      : "- All distances must be exact multiples of 50 (50, 100, 150, ...): distance_per_rep_m, section_distance_m, estimated_distance_m, and pyramid_sequence_m values.\n" +
+        "- Minimum distance_per_rep_m is 50m. Never use 25m or any non-multiple of 50.\n") +
+    (req.distance_min !== undefined && req.distance_max !== undefined
+      ? `- estimated_distance_m MUST be >= ${req.distance_min}m AND <= ${req.distance_max}m. This is a hard constraint.\n`
+      : req.distance_min !== undefined
+        ? `- estimated_distance_m MUST be >= ${req.distance_min}m. This is a hard constraint.\n`
+        : req.distance_max !== undefined
+          ? `- estimated_distance_m MUST be <= ${req.distance_max}m. This is a hard constraint.\n`
+          : "") +
     "- reps must be > 0.\n" +
     "- kind: 'intervals' must have reps >= 2. If reps == 1, use kind: 'continuous' (or 'build' / 'negative_split' / 'fartlek' / 'time_trial' when appropriate).\n" +
     "- build: reps must be 1.\n" +
@@ -203,6 +222,24 @@ export function buildRepairPromptV2(originalText: string, errorText: string, spe
         ? "- benchmark_lite requires exactly one challenge element in main_set, and it must be one GOLF step using 50m intervals\n"
         : "- benchmark_lite requires exactly one challenge element in main_set (kind 'time_trial' or 'broken', or one GOLF step using 50m intervals)\n"
       : "";
+  const poolMultiple = spec.pool_length === 25 ? 25 : 50;
+
+  let distanceRepairBlock = "";
+  if (spec.distance_min !== undefined || spec.distance_max !== undefined) {
+    const rangeDesc =
+      spec.distance_min !== undefined && spec.distance_max !== undefined
+        ? `between ${spec.distance_min}m and ${spec.distance_max}m (inclusive)`
+        : spec.distance_min !== undefined
+          ? `at least ${spec.distance_min}m`
+          : `at most ${spec.distance_max}m`;
+    distanceRepairBlock =
+      `DISTANCE CONSTRAINT (hard requirement):\n` +
+      `- estimated_distance_m MUST be ${rangeDesc}.\n` +
+      `- To fix this: adjust distance_per_rep_m or reps on existing steps to reach the required total.\n` +
+      `- Do NOT add or remove steps — keep the locked blueprint step counts exactly.\n` +
+      `- All distances must remain exact multiples of ${poolMultiple}m.\n\n`;
+  }
+
   return (
     "Your previous response was invalid.\n\n" +
     "TASK:\n" +
@@ -210,6 +247,7 @@ export function buildRepairPromptV2(originalText: string, errorText: string, spe
     "Do not explain the error.\n" +
     "Do not include markdown.\n" +
     "Do not include any text before or after the JSON.\n\n" +
+    distanceRepairBlock +
     "IMPORTANT:\n" +
     `- Selected archetype is mandatory: ${archetype.display_name}\n` +
     `- main_set steps must be ${archetype.min_main_steps}-${archetype.max_main_steps}\n` +

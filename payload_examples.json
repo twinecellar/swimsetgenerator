@@ -1,0 +1,146 @@
+{
+  "endpoint": "POST /v1/plans/generate",
+  "auth": "Authorization: Bearer <supabase-access-token>",
+
+  "field_reference": {
+    "duration_minutes": "15 | 20 | 25 | 30 | 35 | 40 | 45 | 50 | 55 | 60 — required",
+    "effort":           "easy | medium | hard — required",
+    "requested_tags":   "string[] — optional, see tag list below",
+    "regen_attempt":    "integer 0–50 — optional, increments to request variety",
+    "pool_length":      "25 | 50 — optional, pool length in metres (default behaviour is 50m-aligned distances)",
+    "distance_min":     "number — optional, minimum total session distance in metres (must be a multiple of pool_length)",
+    "distance_max":     "number — optional, maximum total session distance in metres (must be a multiple of pool_length, >= distance_min)"
+  },
+
+  "examples": {
+
+    "minimal": {
+      "_comment": "Simplest valid request — only required fields",
+      "duration_minutes": 30,
+      "effort": "medium"
+    },
+
+    "with_tags": {
+      "_comment": "Adding tags to shape the session style",
+      "duration_minutes": 45,
+      "effort": "medium",
+      "requested_tags": ["endurance", "freestyle"]
+    },
+
+    "easy_recovery": {
+      "_comment": "Easy recovery session, no tags needed",
+      "duration_minutes": 20,
+      "effort": "easy"
+    },
+
+    "hard_speed": {
+      "_comment": "High-intensity speed session",
+      "duration_minutes": 40,
+      "effort": "hard",
+      "requested_tags": ["speed", "sprints"]
+    },
+
+    "technique_focused": {
+      "_comment": "Technique drills session",
+      "duration_minutes": 30,
+      "effort": "easy",
+      "requested_tags": ["technique"]
+    },
+
+    "equipment_session": {
+      "_comment": "Session using fins",
+      "duration_minutes": 35,
+      "effort": "medium",
+      "requested_tags": ["fins"]
+    },
+
+    "with_pool_length_25m": {
+      "_comment": "25m pool — distances will be multiples of 25m (e.g. 25, 50, 75, 100)",
+      "duration_minutes": 30,
+      "effort": "medium",
+      "pool_length": 25
+    },
+
+    "with_pool_length_50m": {
+      "_comment": "Explicit 50m pool — distances are multiples of 50m (this is the default behaviour)",
+      "duration_minutes": 45,
+      "effort": "medium",
+      "pool_length": 50
+    },
+
+    "with_distance_range": {
+      "_comment": "Constrain total session distance to 1500–2000m",
+      "duration_minutes": 45,
+      "effort": "medium",
+      "distance_min": 1500,
+      "distance_max": 2000
+    },
+
+    "with_distance_min_only": {
+      "_comment": "Guarantee at least 1000m — no upper cap",
+      "duration_minutes": 30,
+      "effort": "easy",
+      "distance_min": 1000
+    },
+
+    "with_distance_max_only": {
+      "_comment": "Cap session at 1200m — useful for low-volume days",
+      "duration_minutes": 30,
+      "effort": "easy",
+      "distance_max": 1200
+    },
+
+    "25m_pool_with_distance_range": {
+      "_comment": "25m pool with explicit distance band — distance_min/max must be multiples of 25",
+      "duration_minutes": 30,
+      "effort": "medium",
+      "pool_length": 25,
+      "distance_min": 1000,
+      "distance_max": 1500
+    },
+
+    "25m_pool_short_session": {
+      "_comment": "Short beginner-friendly session in a 25m pool with tight distance cap",
+      "duration_minutes": 20,
+      "effort": "easy",
+      "pool_length": 25,
+      "distance_max": 750
+    },
+
+    "regen_request": {
+      "_comment": "Re-roll to get a different plan for the same request (increment regen_attempt each time)",
+      "duration_minutes": 30,
+      "effort": "medium",
+      "requested_tags": ["freestyle"],
+      "regen_attempt": 1
+    },
+
+    "full_request": {
+      "_comment": "All fields specified",
+      "duration_minutes": 45,
+      "effort": "hard",
+      "requested_tags": ["speed", "freestyle"],
+      "pool_length": 50,
+      "distance_min": 2000,
+      "distance_max": 2500,
+      "regen_attempt": 0
+    }
+  },
+
+  "tag_reference": {
+    "session_style": ["technique", "speed", "endurance", "recovery", "fun", "steady"],
+    "stroke":        ["freestyle", "mixed"],
+    "drill":         ["kick", "broken", "fartlek", "time_trial"],
+    "equipment":     ["fins", "pull", "paddles"],
+    "advanced":      ["sprints", "hypoxic", "underwater", "golf", "choice", "benchmark"]
+  },
+
+  "validation_rules": {
+    "duration_minutes": "Must be one of: 15, 20, 25, 30, 35, 40, 45, 50, 55, 60",
+    "effort":           "Must be 'easy', 'medium', or 'hard'",
+    "pool_length":      "Must be 25 or 50",
+    "distance_min":     "Must be a positive multiple of pool_length (25 or 50). If pool_length is omitted, must be a multiple of 50.",
+    "distance_max":     "Must be a positive multiple of pool_length and >= distance_min",
+    "regen_attempt":    "Must be an integer between 0 and 50"
+  }
+}

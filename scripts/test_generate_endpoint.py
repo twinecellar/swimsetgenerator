@@ -45,8 +45,11 @@ PRESETS: dict[str, dict[str, Any]] = {
     "balanced": {
         "duration_minutes": 30,
         "effort": "medium",
-        "requested_tags": ["recovery"],
-        "regen_attempt": 2
+        "requested_tags": ["speed"],
+        "regen_attempt": 2,
+        "pool_length": 50,
+        "distance_min": 1000,
+        "distance_max": 1500,
     }
     
 }

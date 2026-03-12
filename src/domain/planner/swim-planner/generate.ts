@@ -4,7 +4,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { LLMPlanDraft, SwimPlanInput, SwimPlanResponse } from './types';
 import { summarizeHistory } from './prompt';
-import { enforceAndNormalize, ValidationIssue, validateInvariants } from './validate';
+import { checkDistanceConstraint, enforceAndNormalize, ValidationIssue, validateInvariants } from './validate';
 import { buildGenerationSpecV2 } from './v2/router';
 import type { GenerationSpecV2 } from './v2/types';
 import { buildRepairPromptV2, buildSystemPromptV2, buildUserPromptV2 } from './v2/prompts';
@@ -76,7 +76,7 @@ function buildValidPlanFromLLM(rawText: string, payload: SwimPlanInput, spec: Ge
 
 export async function generateSwimPlan(
   payload: SwimPlanInput,
-): Promise<{ plan: SwimPlanResponse; spec: GenerationSpecV2 }> {
+): Promise<{ plan: SwimPlanResponse; spec: GenerationSpecV2; distanceConstraintMet: boolean }> {
   const historySummary = summarizeHistory(payload.historic_sessions);
   const spec = buildGenerationSpecV2(payload);
   const system = buildSystemPromptV2();
@@ -84,12 +84,18 @@ export async function generateSwimPlan(
 
   let firstRaw = '';
   let firstError = '';
+  let firstValidPlan: SwimPlanResponse | null = null;
 
   // First attempt
   try {
     firstRaw = await claudeCompletion(system, user);
     const plan = buildValidPlanFromLLM(firstRaw, payload, spec);
-    return { plan, spec };
+    if (checkDistanceConstraint(plan, payload.session_requested)) {
+      return { plan, spec, distanceConstraintMet: true };
+    }
+    // Structurally valid but outside the requested distance range — save as fallback and try repair
+    firstValidPlan = plan;
+    firstError = `Distance constraint not met: generated ${plan.estimated_distance_m}m`;
   } catch (err: any) {
     firstError = err?.message ?? String(err);
   }
@@ -99,8 +105,14 @@ export async function generateSwimPlan(
     const repairUser = buildRepairPromptV2(firstRaw || '<empty>', firstError, spec);
     const repairRaw = await claudeCompletion(system, repairUser);
     const plan = buildValidPlanFromLLM(repairRaw, payload, spec);
-    return { plan, spec };
+    const distanceConstraintMet = checkDistanceConstraint(plan, payload.session_requested);
+    return { plan, spec, distanceConstraintMet };
   } catch (repairErr: any) {
+    // If we have a structurally valid plan from the first attempt (distance range miss only),
+    // return it rather than 500-ing — the constraint wasn't met but the plan is usable.
+    if (firstValidPlan) {
+      return { plan: firstValidPlan, spec, distanceConstraintMet: false };
+    }
     throw new ValidationIssue(
       `Plan generation failed after initial call and one repair attempt. ` +
         `Initial error: ${firstError}. Repair error: ${repairErr?.message ?? repairErr}`,

@@ -27,6 +27,9 @@ export interface SessionRequested {
   effort: Effort;
   requested_tags: string[];
   swim_level?: 'beginner' | 'intermediate' | 'advanced';
+  pool_length?: 25 | 50;
+  distance_min?: number;
+  distance_max?: number;
 }
 
 export interface HistoricSession {

@@ -9,6 +9,9 @@ export interface SwimPlannerSessionRequested {
   effort: 'easy' | 'medium' | 'hard';
   requested_tags: string[];
   swim_level?: 'beginner' | 'intermediate' | 'advanced';
+  pool_length?: 25 | 50;
+  distance_min?: number;
+  distance_max?: number;
 }
 
 export interface SwimPlannerHistoricSession {
@@ -77,13 +80,13 @@ export interface SwimPlannerResponse {
 
 export async function runSwimPlannerLLM(
   payload: SwimPlannerPayload,
-): Promise<{ plan: SwimPlannerResponse; spec: GenerationSpecV2 }> {
+): Promise<{ plan: SwimPlannerResponse; spec: GenerationSpecV2; distanceConstraintMet: boolean }> {
   const input: SwimPlanInput = {
     session_requested: payload.session_requested,
     historic_sessions: payload.historic_sessions,
     requested_tags: payload.requested_tags,
     regen_attempt: payload.regen_attempt,
   };
-  const { plan, spec } = await generateSwimPlan(input);
-  return { plan: plan as SwimPlannerResponse, spec };
+  const { plan, spec, distanceConstraintMet } = await generateSwimPlan(input);
+  return { plan: plan as SwimPlannerResponse, spec, distanceConstraintMet };
 }

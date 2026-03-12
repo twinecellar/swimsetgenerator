@@ -6,6 +6,9 @@ export interface PlanRequest {
   duration_minutes: DurationMinutes;
   effort: Effort;
   requested_tags?: string[];
+  pool_length?: 25 | 50;
+  distance_min?: number;
+  distance_max?: number;
 }
 
 export interface PlanSegment {
@@ -36,6 +39,7 @@ export interface GeneratedPlan {
     archetype_id?: string;
     archetype_name?: string;
     forced_by_tags?: boolean;
+    distance_constraint_met?: boolean;
   };
 }
 
